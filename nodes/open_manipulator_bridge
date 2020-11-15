@@ -1,0 +1,96 @@
+#! /usr/bin/env python3
+
+import time
+import rospy
+from std_msgs.msg import String, UInt8, UInt8MultiArray, Float32, Float32MultiArray
+from open_manipulator_msgs.srv import *
+
+class OpenManipulatorBridgeNode:
+
+    def __init__(self):
+        self.angles = [0.0, 0.0, 0.0, 0.0]
+        self.buttons = [0, 0, 0, 0, 0, 0]
+        self.feedback = 0
+        self.feedback_to_send = UInt8()
+                    
+    def main(self):                      
+        self.feedbackPub  = rospy.Publisher('/mogi_haptic/feedback_request', UInt8, queue_size=1)
+                                        
+        rospy.init_node('open_manipulator_bridge')
+        self.nodeName = rospy.get_name()
+        rospy.loginfo("{0} started".format(self.nodeName))
+
+        rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
+        rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
+
+        self.rate = float(rospy.get_param('~rate', 5.0)) # in Hz
+
+        rate = rospy.Rate(self.rate)
+        while not rospy.is_shutdown():
+            self.publish()
+            rate.sleep()
+
+    def publish(self):
+        self.feedback_to_send.data = self.feedback
+
+
+    def jointCallback(self, data):
+        self.angles = list(data.data)
+        print(self.angles)
+        self.angles[0] = 0
+        self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1)
+
+    def buttonCallback(self, data):
+        self.buttons = data.data
+        #print(self.buttons)
+
+    def set_joint_client(self, j1, j2, j3, j4, time):
+        service_name = '/open_manipulator/goal_joint_space_path'
+
+        rospy.wait_for_service(service_name)
+
+        try:
+            set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
+
+            arg = SetJointPositionRequest()
+            arg.joint_position.joint_name = ["joint1", "joint2", "joint3", "joint4"]
+            arg.joint_position.position = [j1, j2, j3, j4]
+            arg.path_time = time
+            resp1 = set_joint_angles(arg)
+            print('Service done!')
+            return resp1
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            return False
+
+    def set_gripper_client(self, gripper, time):
+        service_name = '/open_manipulator/goal_tool_control'
+
+        rospy.wait_for_service(service_name)
+
+        try:
+            set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
+
+            arg = SetJointPositionRequest()
+            arg.joint_position.joint_name = ["gripper"]
+            arg.joint_position.position = [gripper]
+            arg.path_time = time
+            resp1 = set_joint_angles(arg)
+            print('Service done!')
+            return resp1
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            return False
+
+
+if __name__ == '__main__':
+    try:
+        node = OpenManipulatorBridgeNode()
+        node.main()
+    except rospy.ROSInterruptException:
+        pass
+
+
+
+    
+    
