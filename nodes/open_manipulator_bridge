@@ -5,13 +5,20 @@ import rospy
 from std_msgs.msg import String, UInt8, UInt8MultiArray, Float32, Float32MultiArray
 from open_manipulator_msgs.srv import *
 
+from open_manipulator_haptic_bridge.thread_wrapper import periodic
+
 class OpenManipulatorBridgeNode:
 
     def __init__(self):
         self.angles = [0.0, 0.0, 0.0, 0.0]
         self.buttons = [0, 0, 0, 0, 0, 0]
         self.feedback = 0
+        self.feedbackPattern = 0
         self.feedback_to_send = UInt8()
+        self.lastJointSentTime = 0
+        self.lastGripperSentTime = 0
+        self.gripperValue = 0.01
+        self.lastGripperValue = 0.01
                     
     def main(self):                      
         self.feedbackPub  = rospy.Publisher('/mogi_haptic/feedback_request', UInt8, queue_size=1)
@@ -23,35 +30,59 @@ class OpenManipulatorBridgeNode:
         rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
         rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
 
-        self.rate = float(rospy.get_param('~rate', 5.0)) # in Hz
+        self.publishRate = float(rospy.get_param('~publish_rate', 30.0)) # in Hz
+        self.serviceRate = float(rospy.get_param('~service_rate', 5.0)) # in Hz
 
-        rate = rospy.Rate(self.rate)
+        self.periodicThread = periodic(self.feedbackThread, 0.1, "Feedback")
+        self.periodicThread.start()
+
+        rate = rospy.Rate(self.publishRate)
         while not rospy.is_shutdown():
             self.publish()
-            rate.sleep()
+            try:
+                rate.sleep()
+            except:
+                print("Ctrl+C occured")
+
+        print("Stopped")
+
+        self.periodicThread.exit()
 
     def publish(self):
         self.feedback_to_send.data = self.feedback
+        self.feedbackPub.publish(self.feedback_to_send)
 
 
     def jointCallback(self, data):
         self.angles = list(data.data)
-        print(self.angles)
+        #print(self.angles)
         self.angles[0] = 0
-        self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1)
+        if time.time() > self.lastJointSentTime + 1.0/self.serviceRate:
+            self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1)
+            self.lastJointSentTime = time.time()
 
     def buttonCallback(self, data):
-        self.buttons = data.data
+        self.buttons = list(data.data)
         #print(self.buttons)
+        if self.buttons[1] == 1:
+            self.gripperValue = 0.01
+            self.feedbackPattern = 1
+        elif self.buttons[0] == 1:
+            self.gripperValue = -0.01
+            self.feedbackPattern = 2
+
+        if time.time() > self.lastGripperSentTime + 1.0/self.serviceRate:
+            if self.lastGripperValue != self.gripperValue:
+                self.set_gripper_client(self.gripperValue,1)
+                self.lastGripperValue = self.gripperValue
+            
 
     def set_joint_client(self, j1, j2, j3, j4, time):
         service_name = '/open_manipulator/goal_joint_space_path'
 
-        rospy.wait_for_service(service_name)
-
+        rospy.wait_for_service(service_name,1)
         try:
             set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
-
             arg = SetJointPositionRequest()
             arg.joint_position.joint_name = ["joint1", "joint2", "joint3", "joint4"]
             arg.joint_position.position = [j1, j2, j3, j4]
@@ -66,7 +97,7 @@ class OpenManipulatorBridgeNode:
     def set_gripper_client(self, gripper, time):
         service_name = '/open_manipulator/goal_tool_control'
 
-        rospy.wait_for_service(service_name)
+        rospy.wait_for_service(service_name,1)
 
         try:
             set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
@@ -81,6 +112,31 @@ class OpenManipulatorBridgeNode:
         except rospy.ServiceException as e:
             print("Service call failed: %s"%e)
             return False
+
+    def feedbackThread(self):
+
+        try:
+            if self.feedbackPattern == 1:
+                self.feedback = 30
+                time.sleep(0.1)
+                self.feedback = 0
+                time.sleep(0.1)
+                self.feedback = 30
+                time.sleep(0.1)
+                self.feedback = 0
+                time.sleep(1)
+                self.feedbackPattern = 0
+            elif self.feedbackPattern == 2:
+                self.feedback = 30
+                time.sleep(0.2)
+                self.feedback = 0
+                time.sleep(1)
+                self.feedbackPattern = 0
+            else:
+                self.feedback = 0
+                self.feedbackPattern = 0
+        except:
+            print("exception")
 
 
 if __name__ == '__main__':
