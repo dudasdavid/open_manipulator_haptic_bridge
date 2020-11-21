@@ -27,6 +27,8 @@ class OpenManipulatorBridgeNode:
         self.nodeName = rospy.get_name()
         rospy.loginfo("{0} started".format(self.nodeName))
 
+        self.set_actuator_state(False)
+
         rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
         rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
 
@@ -44,6 +46,7 @@ class OpenManipulatorBridgeNode:
             except:
                 print("Ctrl+C occured")
 
+        
         print("Stopped")
 
         self.periodicThread.exit()
@@ -71,9 +74,9 @@ class OpenManipulatorBridgeNode:
             self.feedbackPattern = 2
 
         if self.buttons[3] == 1:
-            set_actuator_state(False)
+            self.set_actuator_state(False)
         elif self.buttons[2] == 1:
-            set_actuator_state(True)
+            self.set_actuator_state(True)
 
         if time.time() > self.lastGripperSentTime + 1.0/self.serviceRate:
             if self.lastGripperValue != self.gripperValue:
@@ -120,7 +123,7 @@ class OpenManipulatorBridgeNode:
     def set_actuator_state(self, state):
         service_name = '/open_manipulator/set_actuator_state'
 
-        rospy.wait_for_service(service_name)
+        rospy.wait_for_service(service_name,1)
 
         try:
             set_state = rospy.ServiceProxy(service_name, SetActuatorState)
@@ -128,10 +131,10 @@ class OpenManipulatorBridgeNode:
             arg = SetActuatorStateRequest()
             arg.set_actuator_state = state
             resp1 = set_state(arg)
-            print 'Service done!'
+            print('Service done!')
             return resp1
-        except rospy.ServiceException, e:
-            print "Service call failed: %s"%e
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
             return False
 
     def feedbackThread(self):
