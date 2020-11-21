@@ -70,6 +70,11 @@ class OpenManipulatorBridgeNode:
             self.gripperValue = -0.01
             self.feedbackPattern = 2
 
+        if self.buttons[3] == 1:
+            set_actuator_state(False)
+        elif self.buttons[2] == 1:
+            set_actuator_state(True)
+
         if time.time() > self.lastGripperSentTime + 1.0/self.serviceRate:
             if self.lastGripperValue != self.gripperValue:
                 self.set_gripper_client(self.gripperValue,1)
@@ -110,6 +115,23 @@ class OpenManipulatorBridgeNode:
             return resp1
         except rospy.ServiceException as e:
             print("Service call failed: %s"%e)
+            return False
+
+    def set_actuator_state(self, state):
+        service_name = '/open_manipulator/set_actuator_state'
+
+        rospy.wait_for_service(service_name)
+
+        try:
+            set_state = rospy.ServiceProxy(service_name, SetActuatorState)
+
+            arg = SetActuatorStateRequest()
+            arg.set_actuator_state = state
+            resp1 = set_state(arg)
+            print 'Service done!'
+            return resp1
+        except rospy.ServiceException, e:
+            print "Service call failed: %s"%e
             return False
 
     def feedbackThread(self):
