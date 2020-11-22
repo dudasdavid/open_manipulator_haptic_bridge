@@ -1,0 +1,105 @@
+#! /usr/bin/env python3
+
+import math
+
+import time
+import rospy
+from std_msgs.msg import String, UInt8, UInt8MultiArray, Float32, Float32MultiArray
+from open_manipulator_msgs.srv import *
+
+
+offset_x = 0.012
+offset_z = 0.0595 + 0.017
+l1 = 0.128
+l2 = 0.024
+l1c = 0.13023 # combined l1 - l2 length
+l3 = 0.124
+l4 = 0.126
+
+j1o = math.atan(l2/l1)
+j2o = math.pi - ((math.pi/2.0) - j1o)
+
+class OpenManipulatorChessDemo:
+    def __init__(self):
+        pass
+
+                        
+    def main(self):                                                              
+        rospy.init_node('open_manipulator_chess_demo')
+        self.nodeName = rospy.get_name()
+        rospy.loginfo("{0} started".format(self.nodeName))
+
+        self.set_actuator_state(True)
+
+        while not rospy.is_shutdown():
+            angles = self.inverse_kinematics(0.2,0,0.22)
+            self.set_joint_client(angles,1)
+            break
+
+
+    def inverse_kinematics(self, coords):
+        angles = [0,0,0,0]
+
+        j0 = math.atan(coords[1]/(coords[0] - offset_x))
+
+        x = coords[0] - offset_x - l4 * math.cos(j0)
+        y = coords[1] - l4 * math.sin(j0)
+        z = coords[2] - offset_z
+
+        # recalculate x
+        x = math.sqrt(y*y + x*x)
+
+        c = math.sqrt(x*x + z*z)
+        alpha = math.asin(z/c)
+        beta = (math.pi / 2.0) - alpha
+
+        gamma = math.acos((l1c*l1c + c*c - l3*l3)/(2*c*l1c))
+
+        j1 = (math.pi / 2.0) - alpha - gamma - j1o
+        j2 = math.acos((l1c*l1c + l3*l3 - c*c)/(2*l1c*l3)) - j2o
+        
+        delta = math.pi - gamma - j2 - j2o
+
+        j3 = math.pi - (math.pi/2.0 + beta + delta)
+
+
+        angles[0] = j0
+        angles[1] = j1
+        angles[2] = -j2
+        angles[3] = j3
+        return angles
+
+    def set_joint_client(self, angles, time):
+        service_name = '/open_manipulator/goal_joint_space_path'
+
+        rospy.wait_for_service(service_name,1)
+        try:
+            set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
+            arg = SetJointPositionRequest()
+            arg.joint_position.joint_name = ["joint1", "joint2", "joint3", "joint4"]
+            arg.joint_position.position = angles
+            arg.path_time = time
+            resp1 = set_joint_angles(arg)
+            print('Service done!')
+            return resp1
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            return False
+
+    def set_actuator_state(self, state):
+        service_name = '/open_manipulator/set_actuator_state'
+
+        rospy.wait_for_service(service_name,1)
+
+        try:
+            set_state = rospy.ServiceProxy(service_name, SetActuatorState)
+
+            arg = SetActuatorStateRequest()
+            arg.set_actuator_state = state
+            resp1 = set_state(arg)
+            print('Service done!')
+            return resp1
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            return False
+
