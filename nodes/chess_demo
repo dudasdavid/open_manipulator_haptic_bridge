@@ -32,7 +32,7 @@ class OpenManipulatorChessDemo:
         self.set_actuator_state(True)
 
         while not rospy.is_shutdown():
-            angles = self.inverse_kinematics(0.2,0,0.22)
+            angles = self.inverse_kinematics(self.A8("down"))
             self.set_joint_client(angles,1)
             break
 
@@ -42,9 +42,9 @@ class OpenManipulatorChessDemo:
 
         j0 = math.atan(coords[1]/(coords[0] - offset_x))
 
-        x = coords[0] - offset_x - l4 * math.cos(j0)
-        y = coords[1] - l4 * math.sin(j0)
-        z = coords[2] - offset_z
+        x = coords[0] - offset_x# - l4 * math.cos(j0)
+        y = coords[1]# - l4 * math.sin(j0)
+        z = coords[2] - offset_z + l4
 
         # recalculate x
         x = math.sqrt(y*y + x*x)
@@ -60,7 +60,7 @@ class OpenManipulatorChessDemo:
         
         delta = math.pi - gamma - j2 - j2o
 
-        j3 = math.pi - (math.pi/2.0 + beta + delta)
+        j3 = math.pi - (beta + delta)
 
 
         angles[0] = j0
@@ -103,3 +103,22 @@ class OpenManipulatorChessDemo:
             print("Service call failed: %s"%e)
             return False
 
+    def A8(self, z):
+        x_pos = 0.07
+        y_pos = 0.10
+        if z.lower()=="up":
+            z_pos = 0.1
+        elif z.lower()=="down":
+            z_pos = 0.06
+        else:
+            print("Invalid z")
+
+        return [x_pos,y_pos,z_pos]
+
+
+if __name__ == '__main__':
+    try:
+        node = OpenManipulatorChessDemo()
+        node.main()
+    except rospy.ROSInterruptException:
+        pass
