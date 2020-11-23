@@ -19,6 +19,13 @@ l4 = 0.126
 j1o = math.atan(l2/l1)
 j2o = math.pi - ((math.pi/2.0) - j1o)
 
+home = [-0.002, -1.049, 0.357, 0.706]
+up = [0.12]
+down = [0.05]
+a8=[0.07, 0.10]
+d6=[0.12, -0.013]
+d4=[0.175, -0.013]
+
 class OpenManipulatorChessDemo:
     def __init__(self):
         pass
@@ -32,8 +39,36 @@ class OpenManipulatorChessDemo:
         self.set_actuator_state(True)
 
         while not rospy.is_shutdown():
-            angles = self.inverse_kinematics(self.A8("down"))
+            '''
+            self.gripper("open")
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.A8("up"))
             self.set_joint_client(angles,1)
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D6("up"))
+            self.set_joint_client(angles,1)
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D6("down"))
+            self.set_joint_client(angles,1)
+            time.sleep(1)
+            self.gripper("close")
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D6("up"))
+            self.set_joint_client(angles,1)
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D4("up"))
+            self.set_joint_client(angles,1)
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D4("down"))
+            self.set_joint_client(angles,1)
+            time.sleep(1)
+            self.gripper("open")
+            time.sleep(1)
+            angles = self.inverse_kinematics(self.D4("up"))
+            self.set_joint_client(angles,1)
+            '''
+            #self.chess_move(d6, d4)
+            self.move_to(d6)
             break
 
 
@@ -103,13 +138,97 @@ class OpenManipulatorChessDemo:
             print("Service call failed: %s"%e)
             return False
 
+    def set_gripper_client(self, gripper, time):
+        service_name = '/open_manipulator/goal_tool_control'
+
+        rospy.wait_for_service(service_name,1)
+
+        try:
+            set_joint_angles = rospy.ServiceProxy(service_name, SetJointPosition)
+
+            arg = SetJointPositionRequest()
+            arg.joint_position.joint_name = ["gripper"]
+            arg.joint_position.position = [gripper]
+            arg.path_time = time
+            resp1 = set_joint_angles(arg)
+            print('Service done!')
+            return resp1
+        except rospy.ServiceException as e:
+            print("Service call failed: %s"%e)
+            return False
+
+    def gripper(self, state):
+        if state.lower() == "open":
+            self.set_gripper_client(0.01,0.5)
+        elif state.lower() == "close":
+            self.set_gripper_client(-0.01,0.5)
+        else:
+            print("invalid gripper state")
+
+    def chess_move(self, start, goal):
+        angles = self.inverse_kinematics(start + up)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        angles = self.inverse_kinematics(start + down)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        self.gripper("close")
+        time.sleep(1)
+        angles = self.inverse_kinematics(start + up)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        angles = self.inverse_kinematics(goal + up)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        angles = self.inverse_kinematics(goal + down)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        self.gripper("open")
+        time.sleep(1)
+        angles = self.inverse_kinematics(goal + up)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+        self.set_joint_client(home,1)
+        time.sleep(1)
+
+    def move_to(self, start):
+        angles = self.inverse_kinematics(start + down)
+        self.set_joint_client(angles,1)
+        time.sleep(1)
+
+
+
     def A8(self, z):
         x_pos = 0.07
         y_pos = 0.10
         if z.lower()=="up":
-            z_pos = 0.1
+            z_pos = 0.12
         elif z.lower()=="down":
             z_pos = 0.06
+        else:
+            print("Invalid z")
+
+        return [x_pos,y_pos,z_pos]
+
+    def D6(self, z):
+        x_pos = 0.12
+        y_pos = -0.013
+        if z.lower()=="up":
+            z_pos = 0.12
+        elif z.lower()=="down":
+            z_pos = 0.05
+        else:
+            print("Invalid z")
+
+        return [x_pos,y_pos,z_pos]
+
+    def D4(self, z):
+        x_pos = 0.175
+        y_pos = -0.013
+        if z.lower()=="up":
+            z_pos = 0.12
+        elif z.lower()=="down":
+            z_pos = 0.05
         else:
             print("Invalid z")
 
