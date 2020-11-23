@@ -32,10 +32,10 @@ class OpenManipulatorBridgeNode:
         rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
         rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
 
-        self.publishRate = float(rospy.get_param('~publish_rate', 30.0)) # in Hz
-        self.serviceRate = float(rospy.get_param('~service_rate', 2.0)) # in Hz
+        self.publishRate = float(rospy.get_param('~publish_rate', 50.0)) # in Hz
+        self.serviceRate = float(rospy.get_param('~service_rate', 100.0)) # in Hz
 
-        self.periodicThread = periodic(self.feedbackThread, 0.1, "Feedback")
+        self.periodicThread = periodic(self.feedbackThread, 0.01, "Feedback")
         self.periodicThread.start()
 
         rate = rospy.Rate(self.publishRate)
@@ -60,7 +60,7 @@ class OpenManipulatorBridgeNode:
         self.angles = list(data.data)
         #print(self.angles)
         if time.time() > self.lastJointSentTime + 1.0/self.serviceRate:
-            self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1)
+            self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1.0/self.serviceRate)
             self.lastJointSentTime = time.time()
 
     def buttonCallback(self, data):
@@ -148,13 +148,13 @@ class OpenManipulatorBridgeNode:
                 self.feedback = 30
                 time.sleep(0.1)
                 self.feedback = 0
-                time.sleep(1)
+                time.sleep(0.1)
                 self.feedbackPattern = 0
             elif self.feedbackPattern == 2:
                 self.feedback = 30
                 time.sleep(0.2)
                 self.feedback = 0
-                time.sleep(1)
+                time.sleep(0.1)
                 self.feedbackPattern = 0
             else:
                 self.feedback = 0
