@@ -26,6 +26,11 @@ a8=[0.07, 0.10]
 d6=[0.12, -0.013]
 d4=[0.175, -0.013]
 
+# X coordinate
+rows = {"1": [0.2575], "2": [0.23], "3": [0.2025], "4": [0.175], "5": [0.1475], "6": [0.12], "7": [0.0925], "8": [0.065]}
+# Y coordinate
+columns  = {"A": [0.1], "B": [0.0623], "C": [0.0246], "D": [-0.0131], "E": [-0.0508], "F": [-0.0885], "G": [-0.1262], "H": [-0.1639]}
+
 class OpenManipulatorChessDemo:
     def __init__(self):
         pass
@@ -39,36 +44,8 @@ class OpenManipulatorChessDemo:
         self.set_actuator_state(True)
 
         while not rospy.is_shutdown():
-            '''
-            self.gripper("open")
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.A8("up"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D6("up"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D6("down"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            self.gripper("close")
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D6("up"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D4("up"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D4("down"))
-            self.set_joint_client(angles,1)
-            time.sleep(1)
-            self.gripper("open")
-            time.sleep(1)
-            angles = self.inverse_kinematics(self.D4("up"))
-            self.set_joint_client(angles,1)
-            '''
-            #self.chess_move(d6, d4)
-            self.move_to(d6)
+            #self.chess_move("D6", "D4")
+            self.move_to("D6")
             break
 
 
@@ -166,6 +143,10 @@ class OpenManipulatorChessDemo:
             print("invalid gripper state")
 
     def chess_move(self, start, goal):
+
+        start = columns[start[0]] + rows[start[1]]
+        goal = columns[goal[0]] + rows[goal[1]]
+
         angles = self.inverse_kinematics(start + up)
         self.set_joint_client(angles,1)
         time.sleep(1)
@@ -192,6 +173,7 @@ class OpenManipulatorChessDemo:
         time.sleep(1)
 
     def move_to(self, start):
+        start = columns[start[0]] + rows[start[1]]
         angles = self.inverse_kinematics(start + down)
         self.set_joint_client(angles,1)
         time.sleep(1)
