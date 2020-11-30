@@ -23,6 +23,8 @@ class OpenManipulatorBridgeNode:
         self.lastGripperValue = 0.0
         self.grippingCounter = 0
         self.sendTactileFeedback = True
+        self.smoothStart = True
+        self.actuatorState = False
                     
     def main(self):                      
         self.feedbackPub  = rospy.Publisher('/mogi_haptic/feedback_request', UInt8, queue_size=1)
@@ -64,9 +66,15 @@ class OpenManipulatorBridgeNode:
     def jointCallback(self, data):
         self.angles = list(data.data)
         #print(self.angles)
-        if time.time() > self.lastJointSentTime + 1.0/self.serviceRate:
-            self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1.0/self.serviceRate)
-            self.lastJointSentTime = time.time()
+        if self.actuatorState:
+            if time.time() > self.lastJointSentTime + 1.0/self.serviceRate:
+                if self.smoothStart:
+                    self.lastJointSentTime = time.time() + 2.5
+                    self.smoothStart = False
+                    self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],2.5)
+                else:
+                    self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1.0/self.serviceRate)
+                    self.lastJointSentTime = time.time()
 
     def buttonCallback(self, data):
         self.buttons = list(data.data)
@@ -79,14 +87,21 @@ class OpenManipulatorBridgeNode:
             self.feedbackPattern = 2
 
         if self.buttons[3] == 1:
-            self.set_actuator_state(False)
+            if time.time() > self.lastActuatorSentTime + 2.0:
+                self.set_actuator_state(False)
+                self.lastActuatorSentTime = time.time()
+
         elif self.buttons[2] == 1:
-            self.set_actuator_state(True)
+            if time.time() > self.lastActuatorSentTime + 2.0:
+                self.smoothStart = True
+                self.set_actuator_state(True)
+                self.lastActuatorSentTime = time.time()
 
         if time.time() > self.lastGripperSentTime + 1.0/self.serviceRate:
             if self.lastGripperValue != self.gripperValue:
                 self.set_gripper_client(self.gripperValue,1)
                 self.lastGripperValue = self.gripperValue
+            self.lastGripperSentTime = time.time()
             
 
     def deviceJointCallback(self, data):
@@ -142,6 +157,7 @@ class OpenManipulatorBridgeNode:
             return False
 
     def set_actuator_state(self, state):
+        self.actuatorState = state
         service_name = '/open_manipulator/set_actuator_state'
 
         rospy.wait_for_service(service_name,1)
@@ -189,6 +205,11 @@ class OpenManipulatorBridgeNode:
         except:
             print("exception")
             time.sleep(2.0)
+
+    def simple_filter(self, avg, input, alpha):
+        avg = (alpha * input) + (1.0 - alpha) * avg
+        return avg
+
 
 
 if __name__ == '__main__':
