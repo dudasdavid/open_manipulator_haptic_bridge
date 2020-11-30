@@ -3,6 +3,7 @@
 import time
 import rospy
 from std_msgs.msg import String, UInt8, UInt8MultiArray, Float32, Float32MultiArray
+from sensor_msgs.msg import JointState
 from open_manipulator_msgs.srv import *
 
 from open_manipulator_haptic_bridge.thread_wrapper import periodic
@@ -17,8 +18,11 @@ class OpenManipulatorBridgeNode:
         self.feedback_to_send = UInt8()
         self.lastJointSentTime = 0
         self.lastGripperSentTime = 0
-        self.gripperValue = 0.01
-        self.lastGripperValue = 0.01
+        self.lastActuatorSentTime = 0
+        self.gripperValue = 0.0
+        self.lastGripperValue = 0.0
+        self.grippingCounter = 0
+        self.sendTactileFeedback = True
                     
     def main(self):                      
         self.feedbackPub  = rospy.Publisher('/mogi_haptic/feedback_request', UInt8, queue_size=1)
@@ -29,11 +33,12 @@ class OpenManipulatorBridgeNode:
 
         self.set_actuator_state(False)
 
-        rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
-        rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
-
         self.publishRate = float(rospy.get_param('~publish_rate', 50.0)) # in Hz
         self.serviceRate = float(rospy.get_param('~service_rate', 100.0)) # in Hz
+
+        rospy.Subscriber("/mogi_haptic/joint_angles", Float32MultiArray, self.jointCallback)
+        rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
+        rospy.Subscriber("/open_manipulator/joint_states", JointState, self.deviceJointCallback)
 
         self.periodicThread = periodic(self.feedbackThread, 0.01, "Feedback")
         self.periodicThread.start()
@@ -83,6 +88,22 @@ class OpenManipulatorBridgeNode:
                 self.set_gripper_client(self.gripperValue,1)
                 self.lastGripperValue = self.gripperValue
             
+
+    def deviceJointCallback(self, data):
+        #print(list(data.position))
+        
+        if self.gripperValue == -0.01:
+            if abs(self.gripperValue - data.position[4]) > 0.0001:
+                self.grippingCounter += 1
+                if self.grippingCounter > 120 and self.sendTactileFeedback:
+                    print(abs(self.gripperValue - data.position[4]))
+                    self.sendTactileFeedback = False
+                    self.feedbackPattern = 3
+            else:
+                self.grippingCounter = 0
+        else:
+            self.grippingCounter = 0
+            self.sendTactileFeedback = True
 
     def set_joint_client(self, j1, j2, j3, j4, time):
         service_name = '/open_manipulator/goal_joint_space_path'
