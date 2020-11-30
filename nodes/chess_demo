@@ -14,22 +14,19 @@ l1 = 0.128
 l2 = 0.024
 l1c = 0.13023 # combined l1 - l2 length
 l3 = 0.124
-l4 = 0.126
+l4 = 0.18
 
 j1o = math.atan(l2/l1)
 j2o = math.pi - ((math.pi/2.0) - j1o)
 
 home = [-0.002, -1.049, 0.357, 0.706]
-up = [0.18]
-down = [0.12]
-a8=[0.07, 0.10]
-d6=[0.12, -0.013]
-d4=[0.175, -0.013]
+up = [0.15]
+down = [0.048]
 
 # X coordinate
 rows = {"1": [0.2575], "2": [0.23], "3": [0.2025], "4": [0.175], "5": [0.1475], "6": [0.12], "7": [0.0925], "8": [0.065]}
 # Y coordinate
-columns  = {"A": [0.1], "B": [0.0623], "C": [0.0246], "D": [-0.0131], "E": [-0.0508], "F": [-0.0885], "G": [-0.1262], "H": [-0.1639]}
+columns  = {"A": [0.1], "B": [0.0623], "C": [0.0246], "D": [-0.014], "E": [-0.0508], "F": [-0.1], "G": [-0.1262], "H": [-0.1639]}
 
 class OpenManipulatorChessDemo:
     def __init__(self):
@@ -44,19 +41,20 @@ class OpenManipulatorChessDemo:
         self.set_actuator_state(True)
 
         while not rospy.is_shutdown():
-            #self.chess_move("D6", "D4")
-            self.move_to("D6")
+            self.chess_move("D5", "D4")
+            #self.move_to("A7", "down")
+            #self.gripper("open")
             break
 
 
-    def inverse_kinematics(self, coords):
+    def inverse_kinematics(self, coords, gripper_angle):
         angles = [0,0,0,0]
 
         j0 = math.atan(coords[1]/(coords[0] - offset_x))
 
-        x = coords[0] - offset_x# - l4 * math.cos(j0)
-        y = coords[1]# - l4 * math.sin(j0)
-        z = coords[2] - offset_z + l4
+        x = coords[0] - offset_x - l4 * math.cos(j0) * math.sin(gripper_angle)
+        y = coords[1] - l4 * math.sin(j0) * math.sin(gripper_angle)
+        z = coords[2] - offset_z + math.cos(gripper_angle) *l4
 
         # recalculate x
         x = math.sqrt(y*y + x*x)
@@ -72,7 +70,7 @@ class OpenManipulatorChessDemo:
         
         delta = math.pi - gamma - j2 - j2o
 
-        j3 = math.pi - (beta + delta)
+        j3 = math.pi - (gripper_angle + beta + delta)
 
 
         angles[0] = j0
@@ -136,85 +134,64 @@ class OpenManipulatorChessDemo:
 
     def gripper(self, state):
         if state.lower() == "open":
-            self.set_gripper_client(0.01,0.5)
+            self.set_gripper_client(0.003,0.5)
         elif state.lower() == "close":
-            self.set_gripper_client(-0.01,0.5)
+            self.set_gripper_client(-0.007,0.5)
         else:
             print("invalid gripper state")
 
     def chess_move(self, start, goal):
 
-        start = columns[start[0]] + rows[start[1]]
-        goal = columns[goal[0]] + rows[goal[1]]
+        if float(start[1]) <= 7:
+            gripper_angle_start = math.pi/4.0
+        else:
+            gripper_angle_start = 0
+        if float(goal[1]) <= 7:
+            gripper_angle_goal = math.pi/4.0
+        else:
+            gripper_angle_goal = 0
 
-        angles = self.inverse_kinematics(start + up)
+        start = rows[start[1]] + columns[start[0]]
+        goal = rows[goal[1]] + columns[goal[0]]
+
+        angles = self.inverse_kinematics(start + up, math.pi/4.0)
         self.set_joint_client(angles,1)
         time.sleep(1)
-        angles = self.inverse_kinematics(start + down)
+        angles = self.inverse_kinematics(start + down,gripper_angle_start)
         self.set_joint_client(angles,1)
         time.sleep(1)
         self.gripper("close")
         time.sleep(1)
-        angles = self.inverse_kinematics(start + up)
+        angles = self.inverse_kinematics(start + up, math.pi/4.0)
         self.set_joint_client(angles,1)
         time.sleep(1)
-        angles = self.inverse_kinematics(goal + up)
+        angles = self.inverse_kinematics(goal + up, math.pi/4.0)
         self.set_joint_client(angles,1)
         time.sleep(1)
-        angles = self.inverse_kinematics(goal + down)
+        angles = self.inverse_kinematics(goal + down, gripper_angle_goal)
         self.set_joint_client(angles,1)
         time.sleep(1)
         self.gripper("open")
         time.sleep(1)
-        angles = self.inverse_kinematics(goal + up)
+        angles = self.inverse_kinematics(goal + up, math.pi/4.0)
         self.set_joint_client(angles,1)
         time.sleep(1)
         self.set_joint_client(home,1)
         time.sleep(1)
 
-    def move_to(self, start):
-        start = columns[start[0]] + rows[start[1]]
-        angles = self.inverse_kinematics(start + down)
+    def move_to(self, start, height):
+        if float(start[1]) <= 5 or height == "up":
+            gripper_angle = math.pi/4.0
+        else:
+            gripper_angle = 0
+        start = rows[start[1]] + columns[start[0]]
+        if height == "up":
+            angles = self.inverse_kinematics(start + up,gripper_angle)
+        else:
+            angles = self.inverse_kinematics(start + down,gripper_angle)
         self.set_joint_client(angles,1)
         time.sleep(1)
 
-
-
-    def A8(self, z):
-        x_pos = 0.07
-        y_pos = 0.10
-        if z.lower()=="up":
-            z_pos = 0.12
-        elif z.lower()=="down":
-            z_pos = 0.06
-        else:
-            print("Invalid z")
-
-        return [x_pos,y_pos,z_pos]
-
-    def D6(self, z):
-        x_pos = 0.12
-        y_pos = -0.013
-        if z.lower()=="up":
-            z_pos = 0.12
-        elif z.lower()=="down":
-            z_pos = 0.05
-        else:
-            print("Invalid z")
-
-        return [x_pos,y_pos,z_pos]
-
-    def D4(self, z):
-        x_pos = 0.175
-        y_pos = -0.013
-        if z.lower()=="up":
-            z_pos = 0.12
-        elif z.lower()=="down":
-            z_pos = 0.05
-        else:
-            print("Invalid z")
-
-        return [x_pos,y_pos,z_pos]
 
 
 if __name__ == '__main__':
