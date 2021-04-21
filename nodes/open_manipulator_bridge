@@ -4,6 +4,7 @@ import time
 import rospy
 from std_msgs.msg import String, UInt8, UInt8MultiArray, Float32, Float32MultiArray
 from sensor_msgs.msg import JointState
+from trajectory_msgs.msg import JointTrajectory, JointTrajectoryPoint
 from open_manipulator_msgs.srv import *
 
 from open_manipulator_haptic_bridge.thread_wrapper import periodic
@@ -42,6 +43,24 @@ class OpenManipulatorBridgeNode:
         rospy.Subscriber("/mogi_haptic/button_states", UInt8MultiArray, self.buttonCallback)
         rospy.Subscriber("/open_manipulator/joint_states", JointState, self.deviceJointCallback)
 
+        self.joint_publisher = rospy.Publisher('/arm_controller/command', JointTrajectory, queue_size=1)
+        controller_name = "arm_controller"
+        joint_names = rospy.get_param("/%s/joints" % controller_name)
+        rospy.loginfo("Arm joint names: %s" % joint_names)
+        self.trajectory_command = JointTrajectory()
+        self.trajectory_command.joint_names = joint_names
+        self.point = JointTrajectoryPoint()
+        self.point.time_from_start = rospy.rostime.Duration(0.1,0)
+
+        self.gripper_publisher = rospy.Publisher('/gripper_controller/command', JointTrajectory, queue_size=1)
+        controller_name = "gripper_controller"
+        joint_names = rospy.get_param("/%s/joints" % controller_name)
+        rospy.loginfo("Gripper joint names: %s" % joint_names)
+        self.gripper_command = JointTrajectory()
+        self.gripper_command.joint_names = joint_names
+        self.gripper_point = JointTrajectoryPoint()
+        self.gripper_point.time_from_start = rospy.rostime.Duration(1,0)
+
         self.periodicThread = periodic(self.feedbackThread, 0.01, "Feedback")
         self.periodicThread.start()
 
@@ -71,20 +90,25 @@ class OpenManipulatorBridgeNode:
                 if self.smoothStart:
                     self.lastJointSentTime = time.time() + 2.5
                     self.smoothStart = False
-                    self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],2.5)
+                    #self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],2.5)
+                    self.jointPublisher(self.angles)
                 else:
-                    self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1.0/self.serviceRate)
+                    #self.set_joint_client(self.angles[0],self.angles[1],self.angles[2],self.angles[3],1.0/self.serviceRate)
                     self.lastJointSentTime = time.time()
+                    self.jointPublisher(self.angles)
 
     def buttonCallback(self, data):
         self.buttons = list(data.data)
         #print(self.buttons)
         if self.buttons[1] == 1:
-            self.gripperValue = 0.01
+            self.gripperValue = 0.005
             self.feedbackPattern = 1
         elif self.buttons[0] == 1:
-            self.gripperValue = -0.01
+            self.gripperValue = -0.005
             self.feedbackPattern = 2
+
+        self.gripper_point.positions = [self.gripperValue]
+        self.gripper_point.velocities = [0.0]
 
         if self.buttons[3] == 1:
             if time.time() > self.lastActuatorSentTime + 2.0:
@@ -99,7 +123,11 @@ class OpenManipulatorBridgeNode:
 
         if time.time() > self.lastGripperSentTime + 1.0/self.serviceRate:
             if self.lastGripperValue != self.gripperValue:
-                self.set_gripper_client(self.gripperValue,1)
+                #self.set_gripper_client(self.gripperValue,1)
+                self.gripper_command.points = [self.gripper_point]
+                self.gripper_command.header.stamp = rospy.Time.now()
+                self.gripper_publisher.publish(self.gripper_command)
+
                 self.lastGripperValue = self.gripperValue
             self.lastGripperSentTime = time.time()
             
@@ -119,6 +147,15 @@ class OpenManipulatorBridgeNode:
         else:
             self.grippingCounter = 0
             self.sendTactileFeedback = True
+
+    def jointPublisher(self, angles):
+        #print(angles)
+        self.point.positions = angles
+        self.point.velocities = [0.0, 0.0, 0.0, 0.0]
+        self.trajectory_command.points = [self.point]
+        self.trajectory_command.header.stamp = rospy.Time.now()
+        self.joint_publisher.publish(self.trajectory_command)
+
 
     def set_joint_client(self, j1, j2, j3, j4, time):
         service_name = '/open_manipulator/goal_joint_space_path'
@@ -157,6 +194,9 @@ class OpenManipulatorBridgeNode:
             return False
 
     def set_actuator_state(self, state):
+        self.actuatorState = state
+
+    def set_actuator_state_old(self, state):
         self.actuatorState = state
         service_name = '/open_manipulator/set_actuator_state'
 
